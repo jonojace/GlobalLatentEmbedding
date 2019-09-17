@@ -68,4 +68,14 @@ model, rather than training it.
 The code is based on [mkotha/WaveRNN](https://github.com/mkotha/WaveRNN).
 
 # Cite the work
-S. Ding, and R. Gutierrez-Osuna. "Group Latent Embedding for Vector Quantized Variational Autoencoder in Non-Parallel Voice Conversion." Accepted by Interspeech 2019.
+```
+@inproceedings{Ding2019,
+  author={Shaojin Ding and Ricardo Gutierrez-Osuna},
+  title={{Group Latent Embedding for Vector Quantized Variational Autoencoder in Non-Parallel Voice Conversion}},
+  year=2019,
+  booktitle={Proc. Interspeech 2019},
+  pages={724--728},
+  doi={10.21437/Interspeech.2019-1198},
+  url={http://dx.doi.org/10.21437/Interspeech.2019-1198}
+}
+```
