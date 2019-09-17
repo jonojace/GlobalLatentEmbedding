@@ -6,6 +6,7 @@ This is a Pytorch implementation of [Group Latent Embedding for Vector Quantized
 
 * [VCTK](https://datashare.is.ed.ac.uk/handle/10283/2651)
   * [Audio samples](https://shaojinding.github.io/samples/gle/gle_demo).
+  *  [Trained model](https://drive.google.com/file/d/1W4lA37_susadCY5UQUPPbaqKbRNfNUW7/view?usp=sharing).
 
 ## Preparation
 
