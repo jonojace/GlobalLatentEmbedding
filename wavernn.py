@@ -57,14 +57,17 @@ model_type = args.model or 'vqvae'
 model_name = f'{model_type}.43.upconv'
 
 if model_type[:5] == 'vqvae':
+    print("Model type is vqvae")
     model_fn = lambda dataset: vqvae.Model(model_type=model_type, rnn_dims=896, fc_dims=896, global_decoder_cond_dims=dataset.num_speakers(),
                   upsample_factors=(4, 4, 4), num_group=args.num_group, num_sample=args.num_sample, normalize_vq=True, noise_x=True, noise_y=True).cuda()
     dataset_type = 'multi'
 elif model_type == 'wavernn':
+    print("Model type is wavernn")
     model_fn = lambda dataset: wr.Model(rnn_dims=896, fc_dims=896, pad=2,
                   upsample_factors=(4, 4, 4), feat_dims=80).cuda()
     dataset_type = 'single'
 elif model_type == 'nc':
+    print("Model type is nc")
     model_fn = lambda dataset: nc.Model(rnn_dims=896, fc_dims=896).cuda()
     dataset_type = 'single'
 else:
@@ -138,4 +141,29 @@ else:
     writer.add_scalars('Params/Train', {'beta': args.beta})
     writer.add_scalars('Params/Train', {'num_group': args.num_group})
     writer.add_scalars('Params/Train', {'num_sample': args.num_sample})
-    model.do_train(paths, dataset, optimiser, writer, epochs=args.epochs, test_epochs=args.test_epochs, batch_size=args.batch_size, step=step, epoch=epoch, use_half=use_half, valid_index=test_index, beta=args.beta)
+    #model.do_train(paths, dataset, optimiser, writer, epochs=args.epochs, test_epochs=args.test_epochs, batch_size=args.batch_size, step=step, epoch=epoch, use_half=use_half, valid_index=test_index, beta=args.beta)
+    if model_type[:5] == 'vqvae':
+        model.do_train(paths,
+                       dataset,
+                       optimiser,
+                       writer,
+                       epochs=args.epochs,
+                       test_epochs=args.test_epochs,
+                       batch_size=args.batch_size,
+                       step=step,
+                       epoch=epoch,
+                       use_half=use_half,
+                       valid_index=test_index,
+                       beta=args.beta)
+    elif model_type == 'wavernn':
+        model.do_train(paths,
+                       dataset,
+                       optimiser,
+                       epochs=args.epochs,
+                       batch_size=args.batch_size,
+                       step=step,
+                       valid_index=test_index,
+                       use_half=use_half)
+    else:
+        sys.exit(f'Unknown model: {model_type}')
+

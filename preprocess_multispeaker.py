@@ -48,6 +48,14 @@ with mp.Pool(8) as pool:
         index.append([x for x in res if x])
         print(f'Done processing speaker {i}')
 
+#for i, speaker in enumerate(files):
+ #   for path in speaker:
+  #      print('about to process', path)
+   #     name = process_file(i, path)
+    #    if name:
+     #       index.append(name)
+    #print(f'Done processing speaker {i}')
+
 os.makedirs(DATA_PATH, exist_ok=True)
 with open(f'{DATA_PATH}/index.pkl', 'wb') as f:
     pickle.dump(index, f)

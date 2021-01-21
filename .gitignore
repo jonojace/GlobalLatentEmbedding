@@ -1,2 +1,6 @@
 __pycache__/
 /config.py
+.DS_Store
+model_checkpoints/
+model_outputs/
+log/

@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import math
 import utils.logger as logger
 import numpy as np
-from layers.attention import EmbeddingAttention
+#from layers.attention import EmbeddingAttention
 
 class VectorQuant(nn.Module):
     """
