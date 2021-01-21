@@ -4,3 +4,4 @@ __pycache__/
 model_checkpoints/
 model_outputs/
 log/
+.idea/
