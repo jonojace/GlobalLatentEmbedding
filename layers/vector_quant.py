@@ -89,7 +89,8 @@ class VectorQuantGroup(nn.Module):
         self._num_group = num_group
         self._num_sample = num_sample
         if not self.n_classes % self._num_group == 0:
-            raise ValueError('num of embeddings in each group should be an integer')
+            raise ValueError(f'num of embeddings in each group should be an integer (n_classes % num_group == 0) '
+                             f'\nVectorQuantGroup n_classes=={self.n_classes}, _num_group=={self._num_group}')
         self._num_classes_per_group = int(self.n_classes / self._num_group)
 
         self.embedding0 = nn.Parameter(torch.randn(n_channels, n_classes, vec_len, requires_grad=True) * self.embedding_scale)

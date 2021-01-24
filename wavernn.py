@@ -23,10 +23,10 @@ from tensorboardX import SummaryWriter
 import config
 
 parser = argparse.ArgumentParser(description='Train or run some neural net')
-parser.add_argument('--generate', '-g', action='store_true')
+parser.add_argument('--generate', '-g', action='store_true', help='run generation rather than training')
 parser.add_argument('--float', action='store_true')
 parser.add_argument('--half', action='store_true')
-parser.add_argument('--load', '-l')
+parser.add_argument('--load', '-l', help="provide full path to the model checkpoint to load")
 parser.add_argument('--scratch', action='store_true')
 parser.add_argument('--model', '-m')
 parser.add_argument('--force', action='store_true', help='skip the version check')
@@ -77,8 +77,11 @@ if dataset_type == 'multi':
     data_path = config.multi_speaker_data_path
     with open(f'{data_path}/index.pkl', 'rb') as f:
         index = pickle.load(f)
-    test_index = [x[:30] if i < args.count else [] for i, x in enumerate(index)]
-    train_index = [x[30:] if i < args.count else x for i, x in enumerate(index)]
+
+    logger.log(f"len of vctk index pkl object is {len(index)}") # should be equal to total number of speakers in the dataset
+
+    test_index = [x[:30] if i < args.count else [] for i, x in enumerate(index)] # take first 30 utts from each speaker as test data
+    train_index = [x[30:] if i < args.count else x for i, x in enumerate(index)] # rest of utts are training data from each speaker
     dataset = env.MultispeakerDataset(train_index, data_path)
 elif dataset_type == 'single':
     data_path = config.single_speaker_data_path
@@ -110,11 +113,12 @@ if args.scratch or args.load == None and not os.path.exists(paths.model_path()):
     epoch = 0
 else:
     if args.load:
+        #remove .pyt extension and step number
         prev_model_name = re.sub(r'_[0-9]+$', '', re.sub(r'\.pyt$', '', os.path.basename(args.load)))
         prev_model_basename = prev_model_name.split('_')[0]
         model_basename = model_name.split('_')[0]
         if prev_model_basename != model_basename and not args.force:
-            sys.exit(f'refusing to load {args.load} because its basename ({prev_model_basename}) is not {model_basename}')
+            sys.exit(f'refusing to load {args.load} because its prev_model_basename:({prev_model_basename}) is not model_basename:({model_basename})')
         if args.generate:
             paths = env.Paths(prev_model_name, data_path)
         prev_path = args.load
@@ -127,7 +131,7 @@ else:
 
 
 if args.generate:
-    model.do_generate(paths, step, data_path, test_index, use_half=use_half, verbose=True)#, deterministic=True)
+    model.do_generate(paths, step, data_path, test_index, args.count, use_half=use_half, verbose=True)#, deterministic=True)
 else:
     logger.set_logfile(paths.logfile_path())
     logger.log('------------------------------------------------------------')

@@ -93,6 +93,7 @@ class Overtone(nn.Module):
         rnn_channels = 512
         self.warmup_steps = 64
         self.conv0 = Conv4(1, conv_channels, global_cond_channels)
+        print(self.conv0)
         self.conv1 = Conv4(conv_channels, conv_channels, global_cond_channels)
         self.conv2 = Conv4(conv_channels, conv_channels, global_cond_channels)
         self.rnn0 = RNN4(conv_channels + cond_channels, rnn_channels, self.warmup_steps, global_cond_channels)
