@@ -32,6 +32,9 @@ class Model(nn.Module) :
                  normalize_vq=False, noise_x=False, noise_y=False):
         super().__init__()
         # self.n_classes = 256
+        print("vqvae.py wavernn model definition params")
+        print(f"wrnn_dims={rnn_dims}, fc_dims={fc_dims}, cond_channels={128}, global_cond_channels={global_decoder_cond_dims}")
+        rnn_dims, fc_dims, 128, global_decoder_cond_dims
         self.overtone = Overtone(rnn_dims, fc_dims, 128, global_decoder_cond_dims)
         # self.vq = VectorQuant(1, 410, 128, normalize=normalize_vq)
         self.vq = init_vq(model_type, 1, 410, 128, num_group, num_sample, normalize=normalize_vq)
@@ -87,7 +90,7 @@ class Model(nn.Module) :
             #logger.log(f'cond: {cond.size()}')
             output = self.overtone.generate(discrete.squeeze(2), global_decoder_cond, use_half=use_half, verbose=verbose)
         self.train()
-        return output
+        return output, discrete
 
     def num_params(self) :
         parameters = filter(lambda p: p.requires_grad, self.parameters())
@@ -411,31 +414,51 @@ class Model(nn.Module) :
 
 
 
-    def do_generate(self, paths, step, data_path, test_index, deterministic=False, use_half=False, verbose=False):
-        k = step // 1000
-        test_index = [x[:10] if len(x) > 0 else [] for i, x in enumerate(test_index)]
-        test_index[0] = []
-        test_index[1] = []
-        test_index[2] = []
+    def do_generate(self, paths, step, data_path, test_index, num_test_speakers, deterministic=False, use_half=False, verbose=False):
+        # k = step // 1000
+
+        logger.log('first')
+        logger.log(test_index)
+
+        test_utts_per_speaker = 10 #how many test utts to generate from each speaker
+
+        speaker_id = 1 # the speaker id to condition the model on for generation
+
+        test_index = [x[:test_utts_per_speaker] if len(x) > 0 else [] for i, x in enumerate(test_index)]
+        # test_index[0] = []
+        # test_index[1] = []
+        # test_index[2] = []
         # test_index[3] = []
+
+        logger.log('second')
+        logger.log(test_index)
 
         dataset = env.MultispeakerDataset(test_index, data_path)
         loader = DataLoader(dataset, shuffle=False)
         data = [x for x in loader]
-        n_points = len(data)
+
+        logger.log(data)
+
+        # n_points = len(data)
         gt = [(x[0].float() + 0.5) / (2**15 - 0.5) for speaker, x in data]
         extended = [np.concatenate([np.zeros(self.pad_left_encoder(), dtype=np.float32), x, np.zeros(self.pad_right(), dtype=np.float32)]) for x in gt]
-        speakers = [torch.FloatTensor(speaker[0].float()) for speaker, x in data]
+        # speakers = [torch.FloatTensor(speaker[0].float()) for speaker, x in data]
 
-        vc_speakers = [torch.FloatTensor((np.arange(30) == 1).astype(np.float)) for _ in range(10)]
-        # vc_speakers = [torch.FloatTensor((np.arange(30) == 14).astype(np.float)) for _ in range(20)]
-        # vc_speakers = [torch.FloatTensor((np.arange(30) == 23).astype(np.float)) for _ in range(20)]
-        # vc_speakers = [torch.FloatTensor((np.arange(30) == 4).astype(np.float)) for _ in range(20)]
+        # Set the speaker to generate for each utterance
+        total_test_utts = num_test_speakers * test_utts_per_speaker
+
+        # np.arange(30) == 1) is a one hot conditioning vector indicating speaker 2
+        vc_speakers = [torch.FloatTensor((np.arange(30) == speaker_id).astype(np.float)) for _ in range(total_test_utts)]
+
+        logger.log("vc_speakers:")
+        logger.log(vc_speakers)
+        logger.log(len(vc_speakers))
+
         maxlen = max([len(x) for x in extended])
         aligned = [torch.cat([torch.FloatTensor(x), torch.zeros(maxlen-len(x))]) for x in extended]
         os.makedirs(paths.gen_path(), exist_ok=True)
         # out = self.forward_generate(torch.stack(speakers + list(reversed(speakers)), dim=0).cuda(), torch.stack(aligned + aligned, dim=0).cuda(), verbose=verbose, use_half=use_half)
-        out = self.forward_generate(torch.stack(vc_speakers, dim=0).cuda(),
+        out, discrete = self.forward_generate(torch.stack(vc_speakers, dim=0).cuda(),
                                     torch.stack(aligned, dim=0).cuda(), verbose=verbose, use_half=use_half)
         logger.log(f'out: {out.size()}')
         # for i, x in enumerate(gt) :
@@ -453,4 +476,10 @@ class Model(nn.Module) :
             # audio_tr = out[n_points+i][:len(x)].cpu().numpy()
             audio_tr = out[i][:self.pad_left_encoder() + len(x)].cpu().numpy()
             # librosa.output.write_wav(f'{paths.gen_path()}/{k}k_steps_{i}_transferred.wav', audio_tr, sr=sample_rate)
-            librosa.output.write_wav(f'{paths.gen_path()}/gsb_{i + 1:04d}.wav', audio_tr, sr=sample_rate)
+            # create filename
+            filename_noext = f'gsb_{i + 1:04d}'
+            filepath_noext = f'{paths.gen_path()}/{filename_noext}'
+            # save discrete vqvae tokens for analysis and modification/pronunciation correction
+            torch.save(discrete, f'{filepath_noext}.pt')
+            # save wav file for listening
+            librosa.output.write_wav(f'{filepath_noext}.wav', audio_tr, sr=sample_rate)
