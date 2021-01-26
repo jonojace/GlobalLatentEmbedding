@@ -5,3 +5,4 @@ model_checkpoints/
 model_outputs/
 log/
 .idea/
+notebooks/.ipynb_checkpoints/
