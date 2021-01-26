@@ -444,9 +444,10 @@ class Model(nn.Module):
                     only_discrete=False):
 
         # Set the speaker to generate for each utterance
-        speaker_id = 1  # the speaker id to condition the model on for generation # TODO make this a CLA?
+        # speaker_id = 1  # the speaker id to condition the model on for generation # TODO make this a CLA?
 
-        # Get the utts we have chosen to generate from 'index' which contains ALL utts in dataset
+        # Get the utts we have chosen to generate from 'index'
+        # 'index' contains ALL utts in dataset
         test_index = []
         for i, x in enumerate(index):
             if test_speakers == 0 or i < test_speakers:
@@ -455,6 +456,9 @@ class Model(nn.Module):
                     test_index.append(x)
                 else:
                     test_index.append(x[:test_utts_per_speaker])
+            else:
+                test_index.append([])  # done so that speaker one hots are created of correct dimension
+
 
         # test_index = [x[:test_utts_per_speaker] if len(x) > 0 else [] for i, x in enumerate(test_index)]
 
@@ -462,80 +466,112 @@ class Model(nn.Module):
         # logger.log(test_index)
 
         dataset = env.MultispeakerDataset(test_index, data_path, return_filename=True)
-        loader = DataLoader(dataset, shuffle=False)
+        loader = DataLoader(dataset, batch_size=1, shuffle=False)
 
-        data = [x for x in loader]
+        for speaker, x, filename in loader:  # NB!!! Following code in for loop is only designed for batch size == 1 for now
 
-        logger.log("data:")
-        logger.log(f"len(data) = {len(data)}")
-        logger.log(f"data[0]: {data[0]}")
+            print("speaker.size()", speaker.size())
+            print("x.size()", x.size())
+            print("filename", filename)
 
-        # n_points = len(data)
-        gt = [(x[0].float() + 0.5) / (2 ** 15 - 0.5) for speaker, x, filename in data]
-        extended = [np.concatenate(
-            [np.zeros(self.pad_left_encoder(), dtype=np.float32), x, np.zeros(self.pad_right(), dtype=np.float32)]) for
-                    x in gt]
+            # data = [x for x in loader]
 
-        # TODO use speaker id from dataset
-        # speakers = [torch.FloatTensor(speaker[0].float()) for speaker, x in data]
+            # logger.log("data:")
+            # logger.log(f"len(data) = {len(data)}")
+            # logger.log(f"data[0]: {data[0]}")
 
-        total_test_utts = test_speakers * test_utts_per_speaker
-        print("test_speakers", test_speakers)
-        print("test_utts_per_speaker", test_utts_per_speaker)
+            # n_points = len(data)
+            # gt = [(x[0].float() + 0.5) / (2 ** 15 - 0.5) for speaker, x, filename in data]
+            # extended = [np.concatenate(
+            #     [np.zeros(self.pad_left_encoder(), dtype=np.float32), x, np.zeros(self.pad_right(), dtype=np.float32)]) for
+            #             x in gt]
 
-        # (np.arange(30) == 1) is a one hot conditioning vector indicating speaker 2
-        vc_speakers = [torch.FloatTensor((np.arange(30) == speaker_id).astype(np.float)) for _ in range(total_test_utts)]
+            gt = (x[0].float() + 0.5) / (2 ** 15 - 0.5)
+            extended = np.concatenate([np.zeros(self.pad_left_encoder(), dtype=np.float32), gt, np.zeros(self.pad_right(), dtype=np.float32)])
 
-        logger.log("vc_speakers:")
-        logger.log(vc_speakers)
-        logger.log(len(vc_speakers))
-        print("vc_speakers[0].size()", vc_speakers[0].size())
+            # TODO use speaker id from dataset
+            speakers = [torch.FloatTensor(speaker[0].float())] # TODO seems to only have 3 speakers? As per the CLA. look at dataset...
 
-        maxlen = max([len(x) for x in extended])
-        aligned = [torch.cat([torch.FloatTensor(x), torch.zeros(maxlen - len(x))]) for x in extended]
-        os.makedirs(paths.gen_path(), exist_ok=True)
-        # out = self.forward_generate(torch.stack(speakers + list(reversed(speakers)), dim=0).cuda(), torch.stack(aligned + aligned, dim=0).cuda(), verbose=verbose, use_half=use_half, only_discrete=only_discrete)
-        out, index_atom, index_group = self.forward_generate(torch.stack(vc_speakers, dim=0).cuda(),
-                                              torch.stack(aligned, dim=0).cuda(), verbose=verbose, use_half=use_half,
-                                              only_discrete=only_discrete)
+            total_test_utts = test_speakers * test_utts_per_speaker
+            print("test_speakers", test_speakers)
+            print("test_utts_per_speaker", test_utts_per_speaker)
 
-        if out is not None:
-            logger.log(f'out[0]: {out[0]}')
-            logger.log(f'out: {out.size()}')
-        logger.log(f'index_atom.size(): {index_atom.size()}')
-        logger.log(f'index_atom[0]: {index_atom[0]}')
-        logger.log(f'index_atom[0].size(): {index_atom[0].size()}')
-        logger.log(f'index_group.size(): {index_group.size()}')
-        logger.log(f'index_group[0]: {index_group[0]}')
-        logger.log(f'index_group[0].size(): {index_group[0].size()}')
+            # (np.arange(30) == 1) is a one hot conditioning vector indicating speaker 2
+            # vc_speakers = [torch.FloatTensor((np.arange(30) == speaker_id).astype(np.float)) for _ in range(total_test_utts)]
+            # speakers = vc_speakers
 
-        # for i, x in enumerate(gt) :
-        #     librosa.output.write_wav(f'{paths.gen_path()}/{k}k_steps_{i}_target.wav', x.cpu().numpy(), sr=sample_rate)
-        #     audio = out[i][:len(x)].cpu().numpy()
-        #     librosa.output.write_wav(f'{paths.gen_path()}/{k}k_steps_{i}_generated.wav', audio, sr=sample_rate)
-        #     audio_tr = out[n_points+i][:len(x)].cpu().numpy()
-        #     librosa.output.write_wav(f'{paths.gen_path()}/{k}k_steps_{i}_transferred.wav', audio_tr, sr=sample_rate)
+            print("speakers:")
+            print("speakers", speakers)
+            print("len(speakers)", len(speakers))
+            print("speakers[0].size()", speakers[0].size())
+            print("torch.stack(speakers, dim=0).size()", torch.stack(speakers, dim=0).size())
 
-        for i, x in enumerate(gt):
-            # librosa.output.write_wav(f'{paths.gen_path()}/gsb_{i+1:04d}.wav', x.cpu().numpy(), sr=sample_rate)
-            # librosa.output.write_wav(f'{paths.gen_path()}/gt_gsb_{i+1:03d}.wav', x.cpu().numpy(), sr=sample_rate)
-            # audio = out[i][:len(x)].cpu().numpy()
-            # librosa.output.write_wav(f'{paths.gen_path()}/{k}k_steps_{i}_generated.wav', audio, sr=sample_rate)
-            # audio_tr = out[n_points+i][:len(x)].cpu().numpy()
-            # librosa.output.write_wav(f'{paths.gen_path()}/{k}k_steps_{i}_transferred.wav', audio_tr, sr=sample_rate)
-            # create filename
-            filename_noext = f'gsb_{i + 1:04d}'
-            filepath_noext = f'{paths.gen_path()}/{filename_noext}'
+            # maxlen = max([len(x) for x in extended])
+            print("extended.shape", extended.shape)
+            maxlen = len(extended)
 
-            # save discrete vqvae tokens for analysis and modification/pronunciation correction
-            if i == 0:
-                torch.save(index_atom, f'{filepath_noext}_atom.pt')
-                torch.save(index_group, f'{filepath_noext}_group.pt')
+            # aligned = [torch.cat([torch.FloatTensor(x), torch.zeros(maxlen - len(x))]) for x in extended]
+            aligned = [torch.FloatTensor(extended)]
+            print("torch.stack(aligned, dim=0).size()",torch.stack(aligned, dim=0).size())
+
+
+
+            # out = self.forward_generate(torch.stack(speakers + list(reversed(speakers)), dim=0).cuda(), torch.stack(aligned + aligned, dim=0).cuda(), verbose=verbose, use_half=use_half, only_discrete=only_discrete)
+            out, index_atom, index_group = self.forward_generate(torch.stack(speakers, dim=0).cuda(),
+                                                  torch.stack(aligned, dim=0).cuda(), verbose=verbose, use_half=use_half,
+                                                  only_discrete=only_discrete)
+
+            if out is not None:
+                logger.log(f'out[0]: {out[0]}')
+                logger.log(f'out: {out.size()}')
+            logger.log(f'index_atom.size(): {index_atom.size()}')
+            # logger.log(f'index_atom[0]: {index_atom[0]}')
+            logger.log(f'index_atom[0].size(): {index_atom[0].size()}')
+            logger.log(f'index_group.size(): {index_group.size()}')
+            # logger.log(f'index_group[0]: {index_group[0]}')
+            logger.log(f'index_group[0].size(): {index_group[0].size()}')
+
+            # for i, x in enumerate(gt) :
+            #     librosa.output.write_wav(f'{paths.gen_path()}/{k}k_steps_{i}_target.wav', x.cpu().numpy(), sr=sample_rate)
+            #     audio = out[i][:len(x)].cpu().numpy()
+            #     librosa.output.write_wav(f'{paths.gen_path()}/{k}k_steps_{i}_generated.wav', audio, sr=sample_rate)
+            #     audio_tr = out[n_points+i][:len(x)].cpu().numpy()
+            #     librosa.output.write_wav(f'{paths.gen_path()}/{k}k_steps_{i}_transferred.wav', audio_tr, sr=sample_rate)
+
+            ######################################
+            # Generate atom and group data to save to disk
+            index_atom = index_atom.squeeze()
+            index_group = index_group.squeeze()
+            assert index_atom.size() == index_group.size()
+            vqvae_tokens = []
+            for i in range(len(index_atom)):
+                atom_id = int(index_atom[i])
+                group_id = int(index_group[i])
+                vqvae_tokens.append(f"{group_id}_{atom_id}")
+            vqvae_tokens = '\n'.join(vqvae_tokens)
+
+            ######################################
+            # Save files to disk
+            # for i, x in enumerate(gt):
+            os.makedirs(f'{paths.gen_path()}vqvae_tokens', exist_ok=True)
+            # os.makedirs(f'{paths.gen_path()}groups', exist_ok=True)
+            filename_noext = f'{filename[0]}'
+            with open(f'{paths.gen_path()}vqvae_tokens/{filename_noext}.txt','w') as f:
+                f.write(vqvae_tokens)
+
+            # discrete vqvae tokens for analysis and modification/pronunciation correction
+            # torch.save(index_atom, f'{paths.gen_path()}atoms/{filename_noext}_atom.pt')
+            # torch.save(index_group, f'{paths.gen_path()}groups/{filename_noext}_group.pt')
             # TODO currently we are saving the entire matrix of discrete tokens for all utts multiple times
             # TODO need to change this so that we are saving a single vector of discrete tokens for each input test utt
             # TODO create more informative filenames for test generated utts. use original vctk filename and include the speaker that was used to condition the model (create a mapping from one hot speaker id [0-30] to vctk speaker names [pxxx-pzzz] to do this)
 
+            # print(len(index_atom.tolist()))
+            # print(len(index_group.tolist()))
+            # print(index_atom.tolist())
+            # print(index_group.tolist())
+
             # save wav file for listening
-            if not only_discrete:
-                audio_tr = out[i][:self.pad_left_encoder() + len(x)].cpu().numpy()
-                librosa.output.write_wav(f'{filepath_noext}.wav', audio_tr, sr=sample_rate)
+            if out is not None:
+                audio_tr = out[0][:self.pad_left_encoder() + len(gt)].cpu().numpy()
+                librosa.output.write_wav(f'{paths.gen_path()}/{filename_noext}.wav', audio_tr, sr=sample_rate)
