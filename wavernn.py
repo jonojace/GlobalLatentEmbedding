@@ -30,7 +30,8 @@ parser.add_argument('--load', '-l', help="provide full path to the model checkpo
 parser.add_argument('--scratch', action='store_true')
 parser.add_argument('--model', '-m')
 parser.add_argument('--force', action='store_true', help='skip the version check')
-parser.add_argument('--count', '-c', type=int, default=3, help='size of the test set')
+parser.add_argument('--test-speakers', type=int, default=3, help='number of speakers in the test set (if equal to 0, then uses all speakers)')
+parser.add_argument('--test-utts-per-speaker', type=int, default=30, help='number of test utts from each test speaker (if equal to 0, then uses all utts from each test speaker)')
 parser.add_argument('--partial', action='append', default=[], help='model to partially load')
 parser.add_argument('--lr', '--learning-rate', default=1e-4, type=float, help="initial learning rate")
 parser.add_argument('--weight-decay', default=1e-04, type=float, help="weight decay (default: 1e-04)")
@@ -40,6 +41,10 @@ parser.add_argument('--epochs', type=int, default=1000, help='epochs in training
 parser.add_argument('--test-epochs', type=int, default=200, help='testing every X epochs')
 parser.add_argument('--num-group', type=int, default=8, help='num of groups in dictionary')
 parser.add_argument('--num-sample', type=int, default=1, help='num of Monte Carlo samples')
+
+# Introduced by Jason Fong
+parser.add_argument('--only-gen-discrete', action='store_true', help='prevent decoder from running when generating from a trained model to speed up generation of discrete tokens')
+
 args = parser.parse_args()
 
 if args.float and args.half:
@@ -79,16 +84,18 @@ if dataset_type == 'multi':
         index = pickle.load(f)
 
     logger.log(f"len of vctk index pkl object is {len(index)}") # should be equal to total number of speakers in the dataset
+    # logger.log(f"index.pkl file --- index[:5] {index[:5]}")
+    # logger.log(f"index.pkl file --- index[0][:5] {index[0][:5]}")
 
-    test_index = [x[:30] if i < args.count else [] for i, x in enumerate(index)] # take first 30 utts from each speaker as test data
-    train_index = [x[30:] if i < args.count else x for i, x in enumerate(index)] # rest of utts are training data from each speaker
+    test_index = [x[:args.test_utts_per_speaker] if i < args.test_speakers else [] for i, x in enumerate(index)] # take first 30 utts from args.test_speakers speakers as test data
+    train_index = [x[args.test_utts_per_speaker:] if i < args.test_speakers else x for i, x in enumerate(index)] # rest of utts are training data from each speaker
     dataset = env.MultispeakerDataset(train_index, data_path)
 elif dataset_type == 'single':
     data_path = config.single_speaker_data_path
     with open(f'{data_path}/dataset_ids.pkl', 'rb') as f:
         index = pickle.load(f)
-    test_index = index[-args.count:] + index[:args.count]
-    train_index = index[:-args.count]
+    test_index = index[-args.test_speakers:] + index[:args.test_speakers]
+    train_index = index[:-args.test_speakers]
     dataset = env.AudiobookDataset(train_index, data_path)
 else:
     raise RuntimeError('bad dataset type')
@@ -131,7 +138,14 @@ else:
 
 
 if args.generate:
-    model.do_generate(paths, step, data_path, test_index, args.count, use_half=use_half, verbose=True)#, deterministic=True)
+    model.do_generate(paths,
+                      data_path,
+                      index,
+                      args.test_speakers,
+                      args.test_utts_per_speaker,
+                      use_half=use_half,
+                      verbose=True,
+                      only_discrete=args.only_gen_discrete)
 else:
     logger.set_logfile(paths.logfile_path())
     logger.log('------------------------------------------------------------')
@@ -139,7 +153,7 @@ else:
     logger.log(time.strftime('%c UTC', time.gmtime()))
     logger.log('beta={}'.format(args.beta))
     logger.log('num_group={}'.format(args.num_group))
-    logger.log('count={}'.format(args.count))
+    logger.log('test_speakers ={}'.format(args.test_speakers))
     logger.log('num_sample={}'.format(args.num_sample))
     writer = SummaryWriter(paths.logfile_path() + '_tensorboard')
     writer.add_scalars('Params/Train', {'beta': args.beta})

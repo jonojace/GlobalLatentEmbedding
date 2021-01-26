@@ -48,16 +48,20 @@ class AudiobookDataset(Dataset):
         return len(self.metadata)
 
 class MultispeakerDataset(Dataset):
-    def __init__(self, index, path):
+    def __init__(self, index, path, return_filename=False):
         self.path = path
         self.index = index
         self.all_files = [(i, name) for (i, speaker) in enumerate(index) for name in speaker]
+        self.return_filename = return_filename
 
     def __getitem__(self, index):
         speaker_id, name = self.all_files[index]
         speaker_onehot = (np.arange(len(self.index)) == speaker_id).astype(np.long)
         audio = np.load(f'{self.path}/{speaker_id}/{name}.npy')
-        return speaker_onehot, audio
+        if self.return_filename:
+            return speaker_onehot, audio, name  # name is filename without extension, so p227_011 for example
+        else:
+            return speaker_onehot, audio
 
     def __len__(self):
         return len(self.all_files)

@@ -93,12 +93,23 @@ class VectorQuantGroup(nn.Module):
                              f'\nVectorQuantGroup n_classes=={self.n_classes}, _num_group=={self._num_group}')
         self._num_classes_per_group = int(self.n_classes / self._num_group)
 
+        print("VectorQuantGroup:")
+        print(f"n_classes:{n_classes}")
+        print(f"num_group:{num_group}")
+        print(f"num_sample:{num_sample}")
+        assert n_classes == num_group * num_sample
+
+        # vqvae codebook / embedding table
         self.embedding0 = nn.Parameter(torch.randn(n_channels, n_classes, vec_len, requires_grad=True) * self.embedding_scale)
         self.offset = torch.arange(n_channels).cuda() * n_classes
         # self.offset: (n_channels) long tensor
         self.after_update()
 
     def forward(self, x0):
+        # print("inside VectorQuantGroup forward():")
+        #
+        # print("x0.size()", x0.size())  # [30, 2701, 1, 128]
+
         if self.normalize_scale:
             target_norm = self.normalize_scale * math.sqrt(x0.size(3))
             x = target_norm * x0 / x0.norm(dim=3, keepdim=True)
@@ -112,18 +123,35 @@ class VectorQuantGroup(nn.Module):
 
         # Perform chunking to avoid overflowing GPU RAM.
         index_chunks = []
+        index_chunks_atom = []  # used to hold the discrete atom symbols!
+        index_chunks_group = []  # used to hold the discrete group symbols!
         prob_chunks = []
         for x1_chunk in x1.split(512, dim=0):
             d = (x1_chunk - embedding).norm(dim=3)
-			
-			# Compute the group-wise distance
+
+            # print("x1_chunk.size()", x1_chunk.size())  # [512, 1, 1, 128]
+            # print("embedding.size()", embedding.size())  # [1, 410, 128]
+            # print("(x1_chunk - embedding).size()", (x1_chunk - embedding).size())  # [512, 1, 410, 128]
+            # print("d.size()", d.size())  # [512, 1, 410]
+
+            # Find the nearest atom
+            index_chunk_atom = d.argmin(dim=2)
+            index_chunks_atom.append(index_chunk_atom.clone().detach())
+            # print("index_chunk_atom.size()", index_chunk_atom.size())
+            # print("index_chunk_atom", index_chunk_atom)
+
+            # Compute the group-wise distance
             d_group = torch.zeros(x1_chunk.shape[0], 1, self._num_group).to(torch.device('cuda'))
             for i in range(self._num_group):
                 d_group[:, :, i] = torch.mean(
                     d[:, :, i * self._num_classes_per_group: (i + 1) * self._num_classes_per_group], 2)
-					
-			# Find the nearest group
-            index_chunk_group = d_group.argmin(dim=2)
+
+            # Find the nearest group
+            index_chunk_group = d_group.argmin(dim=2)  # TODO return (as they are groups)
+            index_chunks_group.append(index_chunk_group.clone().detach())
+            # print(f"index_chunk_group.size()={index_chunk_group.size()}")  # [512,1] each element of tensor is an int from 0 to 40, representing groups
+            # print(f"index_chunk_group[:10]", index_chunk_group[:10])
+
 
             # Generate mask for the nearest group
             index_chunk_group = index_chunk_group.repeat(1, self._num_classes_per_group)
@@ -132,19 +160,46 @@ class VectorQuantGroup(nn.Module):
             index_chunk_group += idx_mtx
             encoding_mask = torch.zeros(x1_chunk.shape[0], self.n_classes).cuda()
             encoding_mask.scatter_(1, index_chunk_group, 1)
-			
-			# Compute the weight atoms in the group
+
+            # Compute the weight atoms in the group
             encoding_prob = torch.div(1, d.squeeze())
-			
-			# Apply the mask
+
+            # Apply the mask
             masked_encoding_prob = torch.mul(encoding_mask, encoding_prob)
             p, idx = masked_encoding_prob.sort(dim=1, descending=True)
             prob_chunks.append(p[:, :self._num_sample])
             index_chunks.append(idx[:, :self._num_sample])
 
+        # combine chunks together
+        index_atom = torch.cat(index_chunks_atom, dim=0)
+        index_group = torch.cat(index_chunks_group, dim=0)
 
+        # print("before view() index_atom.size()", index_atom.size())  # [N*samples, n_channels]
+        # print("before view() index_atom[:10]", index_atom[:10])
+        # print("before view() index_atom.min()", index_atom.min())
+        # print("before view() index_atom.max()", index_atom.max())
+        # print("before view() index_group.size()", index_group.size())  # [N*samples, n_channels]
+        # print("before view() index_group[:10]", index_group[:10])
+        # print("before view() index_group.min()", index_group.min())
+        # print("before view() index_group.max()", index_group.max())
+
+        # unflatten to reintroduce N and samples dimension
+        index_atom = index_atom.view((x.size(0), x.size(1), x.size(2)))  # [N, samples, n_channels]
+        index_group = index_group.view((x.size(0), x.size(1), x.size(2)))  # [N, samples, n_channels]
+
+        # print("after view() index_atom.size()", index_atom.size())  # [N*samples, n_channels]
+        # print("after view() index_atom[:10]", index_atom[:10])
+        # print("after view() index_atom.min()", index_atom.min())
+        # print("after view() index_atom.max()", index_atom.max())
+        # print("after view() index_group.size()", index_group.size())  # [N*samples, n_channels]
+        # print("after view() index_group[:10]", index_group[:10])
+        # print("after view() index_group.min()", index_group.min())
+        # print("after view() index_group.max()", index_group.max())
 
         index = torch.cat(index_chunks, dim=0)
+        # print("index.size()", index.size())
+        # print("index[:10]", index[:10])
+
         prob_dist = torch.cat(prob_chunks, dim=0)
         prob_dist = F.normalize(prob_dist, p=1, dim=1)
         # index: (N*samples, n_channels) long tensor
@@ -159,6 +214,8 @@ class VectorQuantGroup(nn.Module):
         # index1: (N*samples*n_channels) long tensor
         output_list = []
         for i in range(self._num_sample):
+            # Jason Fong: seems that what is happening here is that the embeddings fed to the decoder
+            # is the sum of all the embeddings in the table weighted by a probability distribution
             output_list.append(torch.mul(embedding.view(-1, embedding.size(2)).index_select(dim=0, index=index1[:, i]), prob_dist[:, i].unsqueeze(1).detach()))
 
         output_cat = torch.stack(output_list, dim=2)
@@ -166,11 +223,14 @@ class VectorQuantGroup(nn.Module):
         # output_flat: (N*samples*n_channels, vec_len) numeric tensor
         output = output_flat.view(x.size())
 
-        out0 = (output - x).detach() + x
-        out1 = (x.detach() - output).float().norm(dim=3).pow(2)
-        out2 = (x - output.detach()).float().norm(dim=3).pow(2) + (x - x0).float().norm(dim=3).pow(2)
+        discrete = (output - x).detach() + x  # NB that this is the continuous vector corresponding to the discrete group
+        vq_pen = (x.detach() - output).float().norm(dim=3).pow(2)
+        encoder_pen = (x - output.detach()).float().norm(dim=3).pow(2) + (x - x0).float().norm(dim=3).pow(2)
         #logger.log(f'std[embedding0] = {self.embedding0.view(-1, embedding.size(2)).index_select(dim=0, index=index1).std()}')
-        return (out0, out1, out2, entropy)
+
+        # print("discrete.size()", discrete.size())  # [30, 2701, 1, 128]
+
+        return (discrete, vq_pen, encoder_pen, entropy, index_atom, index_group)  # [30, 2701, 1, 128] (generating 10 test utts for first 3 speakers, so 30 utts in total)
 
     def after_update(self):
         if self.normalize_scale:
