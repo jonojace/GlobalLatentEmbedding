@@ -465,6 +465,13 @@ class Model(nn.Module):
         # logger.log('second:')
         # logger.log(test_index)
 
+        # make containing directories
+        os.makedirs(f'{paths.gen_path()}embeddings', exist_ok=True)
+        os.makedirs(f'{paths.gen_path()}vqvae_tokens', exist_ok=True)
+
+        # TODO Save embedding matrix to disk for plotting and analysis
+        torch.save(self.vq.embedding0.clone().detach(), f'{paths.gen_path()}embeddings/vqvae_codebook.pt')
+
         dataset = env.MultispeakerDataset(test_index, data_path, return_filename=True)
         loader = DataLoader(dataset, batch_size=1, shuffle=False)
 
@@ -553,7 +560,6 @@ class Model(nn.Module):
             ######################################
             # Save files to disk
             # for i, x in enumerate(gt):
-            os.makedirs(f'{paths.gen_path()}vqvae_tokens', exist_ok=True)
             # os.makedirs(f'{paths.gen_path()}groups', exist_ok=True)
             filename_noext = f'{filename[0]}'
             with open(f'{paths.gen_path()}vqvae_tokens/{filename_noext}.txt','w') as f:
