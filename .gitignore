@@ -6,3 +6,7 @@ model_outputs/
 log/
 .idea/
 notebooks/.ipynb_checkpoints/
+.ipynb_checkpoints
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+notebooks/.ipynb_checkpoints/analyse_vqvae_tokens-checkpoint.ipynb
