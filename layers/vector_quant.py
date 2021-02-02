@@ -154,6 +154,7 @@ class VectorQuantGroup(nn.Module):
             d_group = torch.zeros(x1_chunk.shape[0], 1, self._num_group).to(torch.device('cuda')) # create empty matrix of correct dimensions
 
             # this for loop is populating d_group, one group at a time
+            # note that group distance is the average of that group's atom distances
             for i in range(self._num_group):
                 # the distance of each group to the encoder output vector
                 # is the average distance between the encoder output vector and the atoms that belong to that group
@@ -162,7 +163,7 @@ class VectorQuantGroup(nn.Module):
                     # Atom embeddings in the codebook are assigned to each group in contiguous blocks of 10
                     # Embeddings 0-9 belong to group 0, embeddings 10-19 belong to group 1, and so on.
                     # TODO is this strong enough to ensure that a particular atom always belong to the same group?
-                    # TODO perhaps causes atom-to-group assignment inconsistencies
+                    # TODO perhaps this causes atom-to-group assignment inconsistencies
                     d_atom[:, :, i * self._num_classes_per_group: (i + 1) * self._num_classes_per_group],
                     # this line averages over the last dim (dim 2). The distances of each of the atoms in a group group
                     # thereby obtaining an average distance from the encoder output embedding to the atoms of the group
@@ -173,6 +174,8 @@ class VectorQuantGroup(nn.Module):
 
             ############################################################################################################
             ###### Find the nearest group
+
+            # index_chunk_group: the closest group index to the encoder output at each timestep
             index_chunk_group = d_group.argmin(dim=2)
             index_chunks_group.append(index_chunk_group.clone().detach())
             print(f"111 index_chunk_group.size()={index_chunk_group.size()}")  # [512,1] each element of tensor is an int from 0 to 40, representing groups

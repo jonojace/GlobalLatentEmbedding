@@ -44,6 +44,7 @@ parser.add_argument('--num-sample', type=int, default=1, help='num of Monte Carl
 
 # Introduced by Jason Fong
 parser.add_argument('--only-gen-discrete', action='store_true', help='prevent decoder from running when generating from a trained model to speed up generation of discrete tokens')
+parser.add_argument('--tokens-path', help="provide full path to the discrete tokens file to generate from")
 
 args = parser.parse_args()
 
@@ -138,14 +139,19 @@ else:
 
 
 if args.generate:
-    model.do_generate(paths,
-                      data_path,
-                      index,
-                      args.test_speakers,
-                      args.test_utts_per_speaker,
-                      use_half=use_half,
-                      verbose=True,
-                      only_discrete=args.only_gen_discrete)
+    if args.tokens_path:
+        model.do_generate_from_tokens(paths,
+                                      args.tokens_path,
+                                      verbose=True)
+    else:
+        model.do_generate(paths,
+                          data_path,
+                          index,
+                          args.test_speakers,
+                          args.test_utts_per_speaker,
+                          use_half=use_half,
+                          verbose=True,
+                          only_discrete=args.only_gen_discrete)
 else:
     logger.set_logfile(paths.logfile_path())
     logger.log('------------------------------------------------------------')

@@ -140,6 +140,8 @@ class Overtone(nn.Module):
         else:
             std_tensor = torch.tensor([]).cuda()
 
+        print("inside overtone.generate()", global_cond.size(), cond.size(), self.cond_pad, seq_len)
+
         # Warmup
         c0 = self.conv0(std_tensor.new_zeros(n, 10, 1), global_cond).repeat(1, 10, 1)
         c1 = self.conv1(c0, global_cond).repeat(1, 10, 1)
@@ -182,7 +184,13 @@ class Overtone(nn.Module):
 
                 #logger.log(f'written to c0[{-ct1-1}]')
                 c0[:, -ct1-1].copy_(self.conv0(coarse, global_cond).squeeze(1))
-                coarse[:, :-4].copy_(coarse[:, 4:])
+
+                # print("coarse.size()", coarse.size())
+                # print("coarse[:, 4:].size()", coarse[:, 4:].size())
+                # print("coarse[:, :-4].size()", coarse[:, :-4].size())
+
+                # coarse[:, :-4].copy_(coarse[:, 4:])  # original
+                coarse[:, :-4] = coarse.clone()[:, 4:]
 
                 if t1 == 0:
                     t2 = (t // 16) % 4
@@ -191,13 +199,15 @@ class Overtone(nn.Module):
                     #logger.log('read c0')
                     #logger.log(f'written to c1[{-ct2-1}]')
                     c1[:, -ct2-1].copy_(self.conv1(c0, global_cond).squeeze(1))
-                    c0[:, :-4].copy_(c0[:, 4:])
+                    # c0[:, :-4].copy_(c0[:, 4:]) # original
+                    c0[:, :-4] = c0.clone()[:, 4:]
 
                     if t2 == 0:
                         #logger.log('read c1')
                         #logger.log('written to c2')
                         c2 = self.conv2(c1, global_cond).squeeze(1)
-                        c1[:, :-4].copy_(c1[:, 4:])
+                        # c1[:, :-4].copy_(c1[:, 4:])  # original
+                        c1[:, :-4] = c1.clone()[:, 4:]
 
                         #logger.log('read c2')
                         #logger.log('written to r0')
