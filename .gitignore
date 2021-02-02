@@ -10,3 +10,4 @@ notebooks/.ipynb_checkpoints/
 .ipynb_checkpoints/
 */.ipynb_checkpoints/*
 notebooks/.ipynb_checkpoints/analyse_vqvae_tokens-checkpoint.ipynb
+test_token_files/
