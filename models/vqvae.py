@@ -41,7 +41,7 @@ class Model(nn.Module):
         rnn_dims, fc_dims, 128, global_decoder_cond_dims
         self.overtone = Overtone(rnn_dims, fc_dims, 128, global_decoder_cond_dims)
         # self.vq = VectorQuant(1, 410, 128, normalize=normalize_vq)
-        self.vq = init_vq(model_type, 1, 410, 128, num_group, num_sample, normalize=normalize_vq)
+        self.vq = init_vq(model_type, 1, num_group*num_sample, 128, num_group, num_sample, normalize=normalize_vq)
         self.noise_x = noise_x
         self.noise_y = noise_y
         encoder_layers = [
@@ -101,7 +101,7 @@ class Model(nn.Module):
                 output = self.overtone.generate(discrete.squeeze(2), global_decoder_cond, use_half=use_half,
                                                 verbose=verbose)
         self.train()
-        return output, index_atom, index_group
+        return output, discrete, index_atom, index_group
 
     def forward_generate_from_tokens(self, global_decoder_cond, discretes, verbose=False):
         print("Inside forward_generate_from_tokens(), global_decoder_cond.size()", global_decoder_cond.size())  # [1, 30]
@@ -434,7 +434,7 @@ class Model(nn.Module):
         maxlen = max([len(x) for x in extended])
         aligned = [torch.cat([torch.FloatTensor(x), torch.zeros(maxlen - len(x))]) for x in extended]
         os.makedirs(paths.gen_path(), exist_ok=True)
-        out, _, _ = self.forward_generate(torch.stack(speakers + list(reversed(speakers)), dim=0).cuda(),
+        out, _, _, _ = self.forward_generate(torch.stack(speakers + list(reversed(speakers)), dim=0).cuda(),
                                        torch.stack(aligned + aligned, dim=0).cuda(), verbose=verbose, use_half=use_half)
 
         logger.log(f'out: {out.size()}')
@@ -480,6 +480,7 @@ class Model(nn.Module):
         # make containing directories
         os.makedirs(f'{paths.gen_path()}embeddings', exist_ok=True)
         os.makedirs(f'{paths.gen_path()}vqvae_tokens', exist_ok=True)
+        os.makedirs(f'{paths.gen_path()}decoder_input_vectors', exist_ok=True)
 
         # TODO Save embedding matrix to disk for plotting and analysis
         torch.save(self.vq.embedding0.clone().detach(), f'{paths.gen_path()}embeddings/vqvae_codebook.pt')
@@ -536,7 +537,7 @@ class Model(nn.Module):
 
 
             # out = self.forward_generate(torch.stack(speakers + list(reversed(speakers)), dim=0).cuda(), torch.stack(aligned + aligned, dim=0).cuda(), verbose=verbose, use_half=use_half, only_discrete=only_discrete)
-            out, index_atom, index_group = self.forward_generate(torch.stack(speakers, dim=0).cuda(),
+            out, discrete, index_atom, index_group = self.forward_generate(torch.stack(speakers, dim=0).cuda(),
                                                   torch.stack(aligned, dim=0).cuda(), verbose=verbose, use_half=use_half,
                                                   only_discrete=only_discrete)
 
@@ -571,11 +572,17 @@ class Model(nn.Module):
 
             ######################################
             # Save files to disk
+
+            # Discrete vqvae symbols
             # for i, x in enumerate(gt):
             # os.makedirs(f'{paths.gen_path()}groups', exist_ok=True)
             filename_noext = f'{filename[0]}'
             with open(f'{paths.gen_path()}vqvae_tokens/{filename_noext}.txt','w') as f:
                 f.write(vqvae_tokens)
+
+            # TODO The ACTUAL embeddings fed into the decoder
+            # TODO (average of atoms in group weighted according to their distance from encoder output)
+            torch.save(discrete, f'{paths.gen_path()}decoder_input_vectors/{filename_noext}.pt')
 
             # discrete vqvae tokens for analysis and modification/pronunciation correction
             # torch.save(index_atom, f'{paths.gen_path()}atoms/{filename_noext}_atom.pt')

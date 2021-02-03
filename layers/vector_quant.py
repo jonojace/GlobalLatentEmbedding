@@ -144,8 +144,8 @@ class VectorQuantGroup(nn.Module):
             # index_chunk_atom: the closest atom index to the encoder output at each timestep
             index_chunk_atom = d_atom.argmin(dim=2)
             index_chunks_atom.append(index_chunk_atom.clone().detach())
-            print("index_chunk_atom.size()", index_chunk_atom.size())  # [512,1]
-            print("index_chunk_atom[:10]", index_chunk_atom[:10])
+            # print("index_chunk_atom.size()", index_chunk_atom.size())  # [512,1]
+            # print("index_chunk_atom[:10]", index_chunk_atom[:10])
 
             ############################################################################################################
             ###### Get distances between the encoder output vector and each group of atom embeddings
@@ -169,8 +169,8 @@ class VectorQuantGroup(nn.Module):
                     # thereby obtaining an average distance from the encoder output embedding to the atoms of the group
                     dim=2
                 )
-            print("torch.zeros(x1_chunk.shape[0], 1, self._num_group).size()", torch.zeros(x1_chunk.shape[0], 1, self._num_group).size()) # [512, 1, 41]
-            print("d_group.size()", d_group.size()) # [512, 1, 41]
+            # print("torch.zeros(x1_chunk.shape[0], 1, self._num_group).size()", torch.zeros(x1_chunk.shape[0], 1, self._num_group).size()) # [512, 1, 41]
+            # print("d_group.size()", d_group.size()) # [512, 1, 41]
 
             ############################################################################################################
             ###### Find the nearest group
@@ -178,34 +178,34 @@ class VectorQuantGroup(nn.Module):
             # index_chunk_group: the closest group index to the encoder output at each timestep
             index_chunk_group = d_group.argmin(dim=2)
             index_chunks_group.append(index_chunk_group.clone().detach())
-            print(f"111 index_chunk_group.size()={index_chunk_group.size()}")  # [512,1] each element of tensor is an int from 0 to 40, representing groups
+            # print(f"111 index_chunk_group.size()={index_chunk_group.size()}")  # [512,1] each element of tensor is an int from 0 to 40, representing groups
             # print(f"index_chunk_group[:10]", index_chunk_group[:10])
 
             ############################################################################################################
             ###### Generate mask for the nearest group
             index_chunk_group = index_chunk_group.repeat(1, self._num_classes_per_group)
-            print(f"222 index_chunk_group.size()={index_chunk_group.size()}") # [512, 10]
+            # print(f"222 index_chunk_group.size()={index_chunk_group.size()}") # [512, 10]
             index_chunk_group = torch.mul(self._num_classes_per_group, index_chunk_group)
-            print(f"333 index_chunk_group.size()={index_chunk_group.size()}") # [512, 10]
+            # print(f"333 index_chunk_group.size()={index_chunk_group.size()}") # [512, 10]
             idx_mtx = torch.LongTensor([x for x in range(self._num_classes_per_group)]).unsqueeze(0).cuda()
-            print(f"idx_mtx.size()={idx_mtx.size()}") # [1, 10]
+            # print(f"idx_mtx.size()={idx_mtx.size()}") # [1, 10]
             index_chunk_group += idx_mtx
             encoding_mask = torch.zeros(x1_chunk.shape[0], self.n_classes).cuda()
-            print(f"encoding_mask.size()={encoding_mask.size()}") # [512, 410]
+            # print(f"encoding_mask.size()={encoding_mask.size()}") # [512, 410]
             encoding_mask.scatter_(1, index_chunk_group, 1)
 
             ############################################################################################################
             ###### Compute the weight atoms in the group
             encoding_prob = torch.div(1, d_atom.squeeze())
-            print(f"encoding_prob.size()={encoding_prob.size()}") # [512, 410]
+            # print(f"encoding_prob.size()={encoding_prob.size()}") # [512, 410]
 
             ############################################################################################################
             ###### Apply the mask
             masked_encoding_prob = torch.mul(encoding_mask, encoding_prob)
-            print(f"masked_encoding_prob.size()={masked_encoding_prob.size()}") # [512, 410]
+            # print(f"masked_encoding_prob.size()={masked_encoding_prob.size()}") # [512, 410]
             p, idx = masked_encoding_prob.sort(dim=1, descending=True) # TODO what is dim 1?
-            print(f"p.size()={p.size()}") # [512, 410]
-            print(f"idx.size()={idx.size()}") # [512, 410]
+            # print(f"p.size()={p.size()}") # [512, 410]
+            # print(f"idx.size()={idx.size()}") # [512, 410]
             prob_chunks.append(p[:, :self._num_sample]) # TODO what is self._num_sample
             index_chunks.append(idx[:, :self._num_sample])
 
@@ -213,27 +213,27 @@ class VectorQuantGroup(nn.Module):
         index_atom = torch.cat(index_chunks_atom, dim=0)
         index_group = torch.cat(index_chunks_group, dim=0)
 
-        print("before view() index_atom.size()", index_atom.size())  # [N*samples, n_channels]
-        print("before view() index_atom[:10]", index_atom[:10])
-        print("before view() index_atom.min()", index_atom.min())
-        print("before view() index_atom.max()", index_atom.max())
-        print("before view() index_group.size()", index_group.size())  # [N*samples, n_channels]
-        print("before view() index_group[:10]", index_group[:10])
-        print("before view() index_group.min()", index_group.min())
-        print("before view() index_group.max()", index_group.max())
+        # print("before view() index_atom.size()", index_atom.size())  # [N*samples, n_channels]
+        # print("before view() index_atom[:10]", index_atom[:10])
+        # print("before view() index_atom.min()", index_atom.min())
+        # print("before view() index_atom.max()", index_atom.max())
+        # print("before view() index_group.size()", index_group.size())  # [N*samples, n_channels]
+        # print("before view() index_group[:10]", index_group[:10])
+        # print("before view() index_group.min()", index_group.min())
+        # print("before view() index_group.max()", index_group.max())
 
         # unflatten to reintroduce N and samples dimension
         index_atom = index_atom.view((x.size(0), x.size(1), x.size(2)))  # [N, samples, n_channels]
         index_group = index_group.view((x.size(0), x.size(1), x.size(2)))  # [N, samples, n_channels]
 
-        print("after view() index_atom.size()", index_atom.size())  # [N*samples, n_channels]
-        print("after view() index_atom[:10]", index_atom[0][:10])
-        print("after view() index_atom.min()", index_atom.min())
-        print("after view() index_atom.max()", index_atom.max())
-        print("after view() index_group.size()", index_group.size())  # [N*samples, n_channels]
-        print("after view() index_group[:10]", index_group[0][:10])
-        print("after view() index_group.min()", index_group.min())
-        print("after view() index_group.max()", index_group.max())
+        # print("after view() index_atom.size()", index_atom.size())  # [N*samples, n_channels]
+        # print("after view() index_atom[:10]", index_atom[0][:10])
+        # print("after view() index_atom.min()", index_atom.min())
+        # print("after view() index_atom.max()", index_atom.max())
+        # print("after view() index_group.size()", index_group.size())  # [N*samples, n_channels]
+        # print("after view() index_group[:10]", index_group[0][:10])
+        # print("after view() index_group.min()", index_group.min())
+        # print("after view() index_group.max()", index_group.max())
 
         index = torch.cat(index_chunks, dim=0)
         # print("index.size()", index.size())

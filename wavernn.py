@@ -28,7 +28,7 @@ parser.add_argument('--float', action='store_true')
 parser.add_argument('--half', action='store_true')
 parser.add_argument('--load', '-l', help="provide full path to the model checkpoint to load")
 parser.add_argument('--scratch', action='store_true')
-parser.add_argument('--model', '-m')
+parser.add_argument('--model', '-m', help='model type')
 parser.add_argument('--force', action='store_true', help='skip the version check')
 parser.add_argument('--test-speakers', type=int, default=3, help='number of speakers in the test set (if equal to 0, then uses all speakers)')
 parser.add_argument('--test-utts-per-speaker', type=int, default=30, help='number of test utts from each test speaker (if equal to 0, then uses all utts from each test speaker)')
@@ -45,6 +45,7 @@ parser.add_argument('--num-sample', type=int, default=1, help='num of Monte Carl
 # Introduced by Jason Fong
 parser.add_argument('--only-gen-discrete', action='store_true', help='prevent decoder from running when generating from a trained model to speed up generation of discrete tokens')
 parser.add_argument('--tokens-path', help="provide full path to the discrete tokens file to generate from")
+parser.add_argument('--name', '-n', help='model identifier')
 
 args = parser.parse_args()
 
@@ -60,7 +61,10 @@ else:
 
 model_type = args.model or 'vqvae'
 
-model_name = f'{model_type}.43.upconv'
+if args.name:
+    model_name = f'{model_type}.{args.name}'
+else:
+    model_name = f'{model_type}'
 
 if model_type[:5] == 'vqvae':
     print("Model type is vqvae")
